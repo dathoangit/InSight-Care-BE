@@ -1,0 +1,8 @@
+services:
+  bot:
+    env_file:
+      - .env
+    restart: always
+    build: .
+    ports:
+      - '${PORT:-8081}:8081'
