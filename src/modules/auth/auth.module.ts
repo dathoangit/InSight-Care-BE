@@ -2,16 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserModule } from '../user/user.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { EmailVerificationEntity } from './entities/email-verification.entity';
-import { PasswordResetTokenEntity } from './entities/password-reset-token.entity';
-import { UserOauthIdentityEntity } from './entities/user-oauth-identity.entity';
 import { getJwtExpirationSeconds } from './jwt-expiration.util';
-import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PublicStrategy } from './strategies/public.strategy';
 
@@ -20,11 +15,6 @@ import { PublicStrategy } from './strategies/public.strategy';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     ConfigModule,
     UserModule,
-    TypeOrmModule.forFeature([
-      PasswordResetTokenEntity,
-      UserOauthIdentityEntity,
-      EmailVerificationEntity,
-    ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -54,7 +44,7 @@ import { PublicStrategy } from './strategies/public.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PublicStrategy, GoogleStrategy],
+  providers: [AuthService, JwtStrategy, PublicStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

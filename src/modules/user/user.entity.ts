@@ -1,9 +1,8 @@
-import { Column, Entity, Index, OneToMany } from 'typeorm';
+import { Column, Entity, Index } from 'typeorm';
 
 import { AbstractEntity } from '../../common/abstract.entity';
 import { StaffRole } from '../../constants';
 import { UseDto } from '../../decorators';
-import { UserOauthIdentityEntity } from '../auth/entities/user-oauth-identity.entity';
 import { UserDto } from './dtos/user.dto';
 
 @Entity({ name: 'users' })
@@ -17,7 +16,7 @@ export class UserEntity extends AbstractEntity<UserDto> {
   @Column({ type: 'varchar', length: 255, nullable: true })
   email!: string | null;
 
-  @Column({ name: 'email_verified_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'email_verified_at', type: 'timestamptz', nullable: true })
   emailVerifiedAt!: Date | null;
 
   @Column({
@@ -33,7 +32,4 @@ export class UserEntity extends AbstractEntity<UserDto> {
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
-
-  @OneToMany(() => UserOauthIdentityEntity, (identity) => identity.user)
-  oauthIdentities!: UserOauthIdentityEntity[];
 }

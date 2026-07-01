@@ -4,18 +4,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import { TokenType } from '../../../constants';
-import { type UserEntity } from '../../user/user.entity';
-import { UserService } from '../../user/user.service';
 import { type IJwtAccessPayload } from '../types/jwt-access-payload.type';
+import { type IJwtAuthenticatedUser } from '../types/jwt-authenticated-user.type';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   private readonly logger = new Logger(JwtStrategy.name);
 
-  constructor(
-    configService: ConfigService,
-    private readonly userService: UserService,
-  ) {
+  constructor(configService: ConfigService) {
     const publicKey = (
       configService.get<string>('JWT_PUBLIC_KEY') ?? ''
     ).replaceAll('\\n', '\n');
@@ -32,23 +28,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: IJwtAccessPayload): Promise<UserEntity> {
+  validate(payload: IJwtAccessPayload): IJwtAuthenticatedUser {
     if (payload.type !== TokenType.ACCESS_TOKEN) {
       this.logger.warn(`Invalid token type: ${payload.type}`);
 
       throw new UnauthorizedException('Invalid token type');
     }
 
-    const user = await this.userService.findById(payload.sub);
-
-    if (!user || !user.isActive) {
-      this.logger.warn(
-        `User not found or inactive for token sub=${payload.sub}`,
-      );
-
-      throw new UnauthorizedException('User not found');
-    }
-
-    return user;
+    return {
+      id: payload.sub,
+      role: payload.role,
+      email: payload.email ?? null,
+    };
   }
 }

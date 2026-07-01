@@ -7,6 +7,7 @@ import { StaffRole } from '../../constants';
 import { BedEntity } from '../layout/entities/bed.entity';
 import { RoomEntity } from '../layout/entities/room.entity';
 import { UserEntity } from '../user/user.entity';
+import { buildBedNames } from './bed-name.utils';
 import { HOSPITAL_LAYOUT } from './constants/hospital-layout';
 
 interface IRoomSeedSpec {
@@ -74,11 +75,13 @@ export class SeedService implements OnModuleInit {
 
     const beds = savedRooms.flatMap((room, index) => {
       const bedCount = roomSpecs[index]?.bedCount ?? 0;
+      const roomName = roomSpecs[index]?.name ?? '';
+      const names = buildBedNames(roomName, bedCount);
 
-      return Array.from({ length: bedCount }, (_, bedIndex) =>
+      return names.map((name) =>
         this.bedRepository.create({
           roomId: room.id,
-          name: `Giường ${bedIndex + 1}`,
+          name,
         }),
       );
     });

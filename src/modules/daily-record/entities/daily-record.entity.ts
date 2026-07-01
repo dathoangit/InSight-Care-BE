@@ -2,13 +2,14 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 import { AbstractEntity } from '../../../common/abstract.entity';
 import { BedEntity } from '../../layout/entities/bed.entity';
+import { UserEntity } from '../../user/user.entity';
 
 @Entity({ name: 'daily_records' })
-@Index(['date', 'bedId'], { unique: true })
+@Index(['businessDayAt', 'bedId'], { unique: true })
 export class DailyRecordEntity extends AbstractEntity {
   @Index()
-  @Column({ type: 'date' })
-  date!: string;
+  @Column({ name: 'business_day_at', type: 'timestamptz' })
+  businessDayAt!: Date;
 
   @Index()
   @Column({ name: 'bed_id', type: 'uuid' })
@@ -39,6 +40,14 @@ export class DailyRecordEntity extends AbstractEntity {
   @Column({ name: 'morning_bp', type: 'varchar', length: 32, nullable: true })
   morningBp!: string | null;
 
+  @Column({
+    name: 'morning_note',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  morningNote!: string | null;
+
   @Column({ name: 'evening_pulse', type: 'int', nullable: true })
   eveningPulse!: number | null;
 
@@ -48,8 +57,30 @@ export class DailyRecordEntity extends AbstractEntity {
   @Column({ name: 'evening_bp', type: 'varchar', length: 32, nullable: true })
   eveningBp!: string | null;
 
+  @Column({
+    name: 'evening_note',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  eveningNote!: string | null;
+
   @Column({ name: 'is_locked', type: 'boolean', default: false })
   isLocked!: boolean;
+
+  @Column({ name: 'morning_entered_by_user_id', type: 'uuid', nullable: true })
+  morningEnteredByUserId!: Uuid | null;
+
+  @Column({ name: 'evening_entered_by_user_id', type: 'uuid', nullable: true })
+  eveningEnteredByUserId!: Uuid | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'morning_entered_by_user_id' })
+  morningEnteredByUser?: UserEntity | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'evening_entered_by_user_id' })
+  eveningEnteredByUser?: UserEntity | null;
 
   @ManyToOne(() => BedEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'bed_id' })

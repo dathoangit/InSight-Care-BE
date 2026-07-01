@@ -37,6 +37,11 @@ export class UpsertDailyRecordDto {
   morningBp?: string | null;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  morningNote?: string | null;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   eveningPulse?: number | null;
@@ -49,4 +54,9 @@ export class UpsertDailyRecordDto {
   @IsString()
   @MaxLength(32)
   eveningBp?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  eveningNote?: string | null;
 }

@@ -81,7 +81,7 @@ import { SnakeNamingStrategy } from './snake-naming.strategy';
               }
             : {
                 extra: {
-                  options: '-c timezone=Asia/Ho_Chi_Minh',
+                  options: '-c timezone=UTC',
                 },
               }),
           namingStrategy: new SnakeNamingStrategy(),

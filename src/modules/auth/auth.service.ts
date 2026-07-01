@@ -1,97 +1,25 @@
-import { createHash, randomBytes } from 'node:crypto';
-
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
 
-import { generateHash, validateHash } from '../../common/utils';
-import { StaffRole, TokenType } from '../../constants';
+import { validateHash } from '../../common/utils';
+import { TokenType } from '../../constants';
 import { type UserDto } from '../user/dtos/user.dto';
 import { type UserEntity } from '../user/user.entity';
 import { UserService } from '../user/user.service';
 import { type AuthTokenDto } from './dtos/auth-token.dto';
-import { type ForgotPasswordDto } from './dtos/forgot-password.dto';
-import { type ForgotPasswordResponseDto } from './dtos/forgot-password-response.dto';
 import { type LoginDto } from './dtos/login.dto';
-import { type RegisterDto } from './dtos/register.dto';
-import { type RequestEmailVerificationDto } from './dtos/request-email-verification.dto';
-import { type ResetPasswordDto } from './dtos/reset-password.dto';
-import { type UpdateEmailDto } from './dtos/update-email.dto';
-import { type VerifyEmailDto } from './dtos/verify-email.dto';
-import {
-  EmailVerificationEntity,
-  EmailVerificationMethod,
-} from './entities/email-verification.entity';
-import { PasswordResetTokenEntity } from './entities/password-reset-token.entity';
-import { UserOauthIdentityEntity } from './entities/user-oauth-identity.entity';
 import { getJwtExpirationSeconds } from './jwt-expiration.util';
 import { type IJwtAccessPayload } from './types/jwt-access-payload.type';
+import { type IJwtAuthenticatedUser } from './types/jwt-authenticated-user.type';
 
 @Injectable()
 export class AuthService {
-  private static readonly forgotPasswordGenericMessage =
-    'If the account exists, a password reset instruction has been sent.';
-
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    @InjectRepository(PasswordResetTokenEntity)
-    private readonly passwordResetTokenRepository: Repository<PasswordResetTokenEntity>,
-    @InjectRepository(UserOauthIdentityEntity)
-    private readonly userOauthIdentityRepository: Repository<UserOauthIdentityEntity>,
-    @InjectRepository(EmailVerificationEntity)
-    private readonly emailVerificationRepository: Repository<EmailVerificationEntity>,
   ) {}
-
-  async register(dto: RegisterDto): Promise<UserDto> {
-    const existingUsername = await this.userService.findByUsername(
-      dto.username,
-    );
-
-    if (existingUsername) {
-      throw new ConflictException('Username already exists');
-    }
-
-    const rawEmail = dto.email?.trim() ?? '';
-    const emailNormalized = rawEmail.length > 0 ? rawEmail.toLowerCase() : null;
-
-    if (emailNormalized) {
-      const existingEmail = await this.userService.findByEmail(emailNormalized);
-
-      if (existingEmail) {
-        throw new ConflictException('Email already exists');
-      }
-    }
-
-    const user = await this.userService.createUser({
-      username: dto.username,
-      email: emailNormalized,
-      passwordHash: generateHash(dto.password),
-      role: StaffRole.NURSE,
-    });
-
-    if (emailNormalized) {
-      await this.createEmailVerification({
-        email: emailNormalized,
-        method: EmailVerificationMethod.LINK,
-        userId: user.id,
-      });
-    }
-
-    return user.toDto();
-  }
 
   async login(dto: LoginDto): Promise<AuthTokenDto> {
     const user = await this.userService.findByIdentifierWithPassword(
@@ -120,203 +48,14 @@ export class AuthService {
     };
   }
 
-  me(user: UserEntity): UserDto {
-    return user.toDto();
-  }
+  async me(user: IJwtAuthenticatedUser): Promise<UserDto> {
+    const entity = await this.userService.findById(user.id);
 
-  async updateEmail(user: UserEntity, dto: UpdateEmailDto): Promise<void> {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const existing = await this.userService.findByEmail(normalizedEmail);
-
-    if (existing && existing.id !== user.id) {
-      throw new ConflictException('Email already exists');
+    if (!entity || !entity.isActive) {
+      throw new UnauthorizedException('User not found');
     }
 
-    await this.createEmailVerification({
-      email: normalizedEmail,
-      method: EmailVerificationMethod.LINK,
-      userId: user.id,
-    });
-  }
-
-  async requestEmailVerification(
-    user: UserEntity,
-    dto: RequestEmailVerificationDto,
-  ): Promise<void> {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const existing = await this.userService.findByEmail(normalizedEmail);
-
-    if (existing && existing.id !== user.id) {
-      throw new ConflictException('Email already exists');
-    }
-
-    await this.createEmailVerification({
-      email: normalizedEmail,
-      method: dto.method,
-      userId: user.id,
-    });
-  }
-
-  async verifyEmail(user: UserEntity, dto: VerifyEmailDto): Promise<UserDto> {
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const verification = await this.emailVerificationRepository.findOne({
-      where: {
-        email: normalizedEmail,
-        method: dto.method,
-        userId: user.id,
-        consumedAt: IsNull(),
-      },
-      order: { createdAt: 'DESC' },
-    });
-
-    if (!verification) {
-      throw new NotFoundException('Email verification not found');
-    }
-
-    if (verification.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('Verification has expired');
-    }
-
-    const providedSecret =
-      dto.method === EmailVerificationMethod.OTP ? dto.otp : dto.token;
-    const expectedHash =
-      dto.method === EmailVerificationMethod.OTP
-        ? verification.otpHash
-        : verification.tokenHash;
-
-    if (!providedSecret || !expectedHash) {
-      throw new BadRequestException('Verification secret is required');
-    }
-
-    const secretHash = this.hashResetToken(providedSecret);
-
-    if (secretHash !== expectedHash) {
-      throw new BadRequestException('Invalid verification secret');
-    }
-
-    verification.consumedAt = new Date();
-    await this.emailVerificationRepository.save(verification);
-    const updatedUser = await this.userService.markEmailVerified(
-      user.id,
-      normalizedEmail,
-    );
-
-    if (!updatedUser) {
-      throw new NotFoundException('User not found');
-    }
-
-    return updatedUser.toDto();
-  }
-
-  async loginWithGoogleProfile(payload: {
-    providerUserId: string;
-    email: string | null;
-    fullName: string | null;
-    profile: Record<string, unknown>;
-  }): Promise<AuthTokenDto> {
-    const existingIdentity = await this.userOauthIdentityRepository.findOne({
-      where: {
-        provider: 'google',
-        providerUserId: payload.providerUserId,
-      },
-      relations: ['user'],
-    });
-
-    let user = existingIdentity?.user ?? null;
-    const normalizedEmail = payload.email?.trim().toLowerCase() ?? null;
-
-    if (!user && normalizedEmail) {
-      user = await this.userService.findByEmail(normalizedEmail);
-    }
-
-    if (!user) {
-      const generatedUsername =
-        await this.generateUniqueUsernameFromEmail(normalizedEmail);
-      user = await this.userService.createUser({
-        username: generatedUsername,
-        email: normalizedEmail,
-        passwordHash: generateHash(randomBytes(24).toString('hex')),
-        role: StaffRole.NURSE,
-      });
-
-      if (normalizedEmail) {
-        await this.userService.markEmailVerified(user.id, normalizedEmail);
-      }
-    }
-
-    if (!existingIdentity) {
-      const identity = this.userOauthIdentityRepository.create({
-        provider: 'google',
-        providerUserId: payload.providerUserId,
-        email: normalizedEmail,
-        profileJson: payload.profile,
-        userId: user.id,
-      });
-      await this.userOauthIdentityRepository.save(identity);
-    }
-
-    return this.loginByUserEntity(user);
-  }
-
-  async forgotPassword(
-    dto: ForgotPasswordDto,
-  ): Promise<ForgotPasswordResponseDto> {
-    const user = await this.userService.findByEmail(dto.email);
-
-    if (!user) {
-      return { message: AuthService.forgotPasswordGenericMessage };
-    }
-
-    const plainToken = randomBytes(32).toString('hex');
-    const tokenHash = this.hashResetToken(plainToken);
-    const ttlMinutes =
-      this.configService.get<number>('RESET_TOKEN_TTL_MINUTES') ?? 30;
-    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
-
-    const entity = this.passwordResetTokenRepository.create({
-      tokenHash,
-      expiresAt,
-      userId: user.id,
-      usedAt: null,
-    });
-
-    const saved = await this.passwordResetTokenRepository.save(entity);
-
-    // Do not log the raw token or email; integrate email delivery here in production.
-    this.logger.log(
-      `Password reset token issued userId=${user.id} rowId=${
-        saved.id
-      } expiresAt=${saved.expiresAt.toISOString()}`,
-    );
-
-    return { message: AuthService.forgotPasswordGenericMessage };
-  }
-
-  async resetPassword(dto: ResetPasswordDto): Promise<void> {
-    const tokenHash = this.hashResetToken(dto.token);
-    const token = await this.passwordResetTokenRepository.findOne({
-      where: { tokenHash },
-    });
-
-    if (!token) {
-      throw new BadRequestException('Invalid reset token');
-    }
-
-    if (token.usedAt) {
-      throw new BadRequestException('Reset token already used');
-    }
-
-    if (token.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('Reset token has expired');
-    }
-
-    await this.userService.updatePassword(
-      token.userId,
-      generateHash(dto.newPassword),
-    );
-    token.usedAt = new Date();
-    await this.passwordResetTokenRepository.save(token);
-    this.logger.log(`Password reset completed userId=${token.userId}`);
+    return entity.toDto();
   }
 
   private async issueAccessToken(user: UserEntity): Promise<string> {
@@ -330,96 +69,7 @@ export class AuthService {
     return this.jwtService.signAsync(payload);
   }
 
-  private hashResetToken(rawToken: string): string {
-    return createHash('sha256').update(rawToken).digest('hex');
-  }
-
   private getAccessTokenExpiresIn(): number {
     return getJwtExpirationSeconds(this.configService);
-  }
-
-  private async loginByUserEntity(user: UserEntity): Promise<AuthTokenDto> {
-    const freshUser = await this.userService.findById(user.id);
-
-    if (!freshUser || !freshUser.isActive) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    const expiresIn = this.getAccessTokenExpiresIn();
-    const token = await this.issueAccessToken(freshUser);
-
-    return {
-      user: freshUser.toDto(),
-      token: {
-        expiresIn,
-        accessToken: token,
-      },
-    };
-  }
-
-  private async createEmailVerification(payload: {
-    email: string;
-    method: EmailVerificationMethod;
-    userId: Uuid;
-  }): Promise<void> {
-    const token = randomBytes(24).toString('hex');
-    const otp = String(Math.floor(100_000 + Math.random() * 900_000));
-    const ttlMinutes =
-      this.configService.get<number>('EMAIL_VERIFY_TTL_MINUTES') ?? 15;
-    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
-    const entity = this.emailVerificationRepository.create({
-      email: payload.email,
-      method: payload.method,
-      tokenHash:
-        payload.method === EmailVerificationMethod.LINK
-          ? this.hashResetToken(token)
-          : null,
-      otpHash:
-        payload.method === EmailVerificationMethod.OTP
-          ? this.hashResetToken(otp)
-          : null,
-      expiresAt,
-      consumedAt: null,
-      userId: payload.userId,
-    });
-
-    await this.emailVerificationRepository.save(entity);
-    this.logger.log(
-      `Email verification issued userId=${payload.userId} email=${payload.email} method=${payload.method}`,
-    );
-  }
-
-  private async generateUniqueUsernameFromEmail(
-    email: string | null,
-  ): Promise<string> {
-    const base =
-      email
-        ?.split('@')[0]
-        ?.replace(/[^\d_a-z]/g, '')
-        .slice(0, 24) || 'google_user';
-
-    return this.resolveUniqueUsername(base, 0);
-  }
-
-  private buildUsernameCandidate(base: string, counter: number): string {
-    if (counter === 0) {
-      return base.length >= 3 ? base : `user_${base}`;
-    }
-
-    return `${base}_${counter}`.slice(0, 64);
-  }
-
-  private async resolveUniqueUsername(
-    base: string,
-    counter: number,
-  ): Promise<string> {
-    const username = this.buildUsernameCandidate(base, counter);
-    const existing = await this.userService.findByUsername(username);
-
-    if (!existing) {
-      return username;
-    }
-
-    return this.resolveUniqueUsername(base, counter + 1);
   }
 }
