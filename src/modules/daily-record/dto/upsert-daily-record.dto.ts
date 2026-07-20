@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -19,8 +20,20 @@ export class UpsertDailyRecordDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{1,10}$/)
+  @MaxLength(10)
+  morningPatientCode?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(255)
   eveningPatientName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,10}$/)
+  @MaxLength(10)
+  eveningPatientCode?: string | null;
 
   @IsOptional()
   @IsInt()

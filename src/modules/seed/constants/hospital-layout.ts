@@ -1,15 +1,17 @@
+import { type HospitalFloorLabel } from '../../layout/constants/floor-labels';
+
 export interface IHospitalFloorLayout {
-  floor: number;
+  floor: HospitalFloorLabel;
   rooms: string[];
 }
 
 export const HOSPITAL_LAYOUT: IHospitalFloorLayout[] = [
   {
-    floor: 2,
+    floor: '1-9',
     rooms: ['1', '1', '2', '2', '3', '3', '5A', '5A', '5B', '6', '7', '8', '9'],
   },
   {
-    floor: 3,
+    floor: 'CC-15',
     rooms: [
       'CC',
       'CC',
@@ -30,7 +32,7 @@ export const HOSPITAL_LAYOUT: IHospitalFloorLayout[] = [
     ],
   },
   {
-    floor: 4,
+    floor: '16-25',
     rooms: [
       '16',
       '17',
@@ -53,7 +55,7 @@ export const HOSPITAL_LAYOUT: IHospitalFloorLayout[] = [
     ],
   },
   {
-    floor: 5,
+    floor: '26-31',
     rooms: [
       '26',
       '26',

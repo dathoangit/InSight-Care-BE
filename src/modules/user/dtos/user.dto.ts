@@ -13,6 +13,9 @@ export class UserDto extends AbstractDto {
   @StringField()
   username!: string;
 
+  @StringField()
+  fullName!: string;
+
   @EmailFieldOptional()
   email?: string | null;
 
@@ -28,6 +31,7 @@ export class UserDto extends AbstractDto {
   constructor(entity: UserEntity) {
     super(entity);
     this.username = entity.username;
+    this.fullName = entity.fullName;
     this.email = entity.email ?? undefined;
     this.emailVerifiedAt = entity.emailVerifiedAt ?? undefined;
     this.role = entity.role;

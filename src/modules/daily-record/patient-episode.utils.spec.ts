@@ -3,9 +3,13 @@ import { type DailyRecordEntity } from './entities/daily-record.entity';
 import {
   buildChartSeries,
   buildDailyRows,
+  buildPatientDailyRows,
   buildRecordsByDate,
   classifyDay,
   countShiftsWithVitals,
+  createCodeMatcher,
+  createNameMatcher,
+  findAllEpisodes,
   normalizePatientName,
   parseBloodPressure,
   resolveEpisodeBoundaries,
@@ -20,6 +24,8 @@ function record(
     businessDayAt: businessDayStartUtc(dateYmd),
     morningPatientName: null,
     eveningPatientName: null,
+    morningPatientCode: null,
+    eveningPatientCode: null,
     morningPulse: null,
     morningTemp: null,
     morningBp: null,
@@ -61,7 +67,7 @@ describe('patient-episode.utils', () => {
       expect(
         classifyDay(
           record('2026-06-01', { morningPatientName: 'Nguyễn Văn A' }),
-          normalizePatientName('nguyễn văn a'),
+          createNameMatcher('nguyễn văn a'),
         ),
       ).toBe('match');
     });
@@ -70,14 +76,44 @@ describe('patient-episode.utils', () => {
       expect(
         classifyDay(
           record('2026-06-01', { eveningPatientName: 'Trần Thị B' }),
-          normalizePatientName('Nguyễn Văn A'),
+          createNameMatcher('Nguyễn Văn A'),
         ),
       ).toBe('other');
     });
 
     it('returns empty when no names are recorded', () => {
       expect(
-        classifyDay(record('2026-06-01'), normalizePatientName('Nguyễn Văn A')),
+        classifyDay(record('2026-06-01'), createNameMatcher('Nguyễn Văn A')),
+      ).toBe('empty');
+    });
+
+    it('returns match when shift code matches', () => {
+      expect(
+        classifyDay(
+          record('2026-06-01', {
+            morningPatientName: 'Nguyễn Văn A',
+            morningPatientCode: '1234567890',
+          }),
+          createCodeMatcher('1234567890'),
+        ),
+      ).toBe('match');
+    });
+
+    it('returns other when a different patient code is recorded', () => {
+      expect(
+        classifyDay(
+          record('2026-06-01', { eveningPatientCode: '9999999999' }),
+          createCodeMatcher('1234567890'),
+        ),
+      ).toBe('other');
+    });
+
+    it('returns empty when code is missing on both shifts', () => {
+      expect(
+        classifyDay(
+          record('2026-06-01', { morningPatientName: 'Nguyễn Văn A' }),
+          createCodeMatcher('1234567890'),
+        ),
       ).toBe('empty');
     });
   });
@@ -94,7 +130,7 @@ describe('patient-episode.utils', () => {
 
       const boundaries = resolveEpisodeBoundaries(
         recordsByDate,
-        normalizePatientName('Nguyễn Văn A'),
+        createNameMatcher('Nguyễn Văn A'),
         '2026-06-03',
       );
 
@@ -116,7 +152,7 @@ describe('patient-episode.utils', () => {
 
       const boundaries = resolveEpisodeBoundaries(
         recordsByDate,
-        normalizePatientName('Nguyễn Văn A'),
+        createNameMatcher('Nguyễn Văn A'),
         '2026-06-02',
       );
 
@@ -133,12 +169,12 @@ describe('patient-episode.utils', () => {
 
       const firstEpisode = resolveEpisodeBoundaries(
         recordsByDate,
-        normalizePatientName('Nguyễn Văn A'),
+        createNameMatcher('Nguyễn Văn A'),
         '2026-06-01',
       );
       const secondEpisode = resolveEpisodeBoundaries(
         recordsByDate,
-        normalizePatientName('Nguyễn Văn A'),
+        createNameMatcher('Nguyễn Văn A'),
         '2026-06-03',
       );
 
@@ -156,7 +192,7 @@ describe('patient-episode.utils', () => {
       expect(
         resolveEpisodeBoundaries(
           recordsByDate,
-          normalizePatientName('Nguyễn Văn A'),
+          createNameMatcher('Nguyễn Văn A'),
           '2026-06-01',
         ),
       ).toBeNull();
@@ -170,10 +206,38 @@ describe('patient-episode.utils', () => {
       expect(
         resolveEpisodeBoundaries(
           recordsByDate,
-          normalizePatientName('Nguyễn Văn A'),
+          createNameMatcher('Nguyễn Văn A'),
           '2026-06-02',
         ),
       ).toBeNull();
+    });
+  });
+
+  describe('findAllEpisodes', () => {
+    it('finds multiple admissions for the same patient code', () => {
+      const recordsByDate = buildRecordsByDate([
+        record('2026-06-01', {
+          morningPatientName: 'Nguyễn Văn A',
+          morningPatientCode: '1234567890',
+        }),
+        record('2026-06-02', {
+          morningPatientName: 'Trần Thị B',
+          morningPatientCode: '9999999999',
+        }),
+        record('2026-06-03', {
+          morningPatientName: 'Nguyễn Văn A',
+          morningPatientCode: '1234567890',
+        }),
+      ]);
+
+      const episodes = findAllEpisodes(
+        recordsByDate,
+        createCodeMatcher('1234567890'),
+      );
+
+      expect(episodes).toHaveLength(2);
+      expect(episodes[0]?.startDate).toBe('2026-06-03');
+      expect(episodes[1]?.startDate).toBe('2026-06-01');
     });
   });
 
@@ -247,6 +311,34 @@ describe('patient-episode.utils', () => {
 
       expect(countShiftsWithVitals(dailyRows)).toBe(1);
       expect(shiftHasVitals(dailyRows[0]?.morning ?? null)).toBe(true);
+    });
+  });
+
+  describe('buildPatientDailyRows', () => {
+    it('filters shifts by patient code and admission id', () => {
+      const admissionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' as Uuid;
+      const dailyRows = buildPatientDailyRows(
+        buildRecordsByDate([
+          record('2026-06-01', {
+            morningPatientName: 'Nguyễn Văn A',
+            morningPatientCode: '1234567890',
+            morningPulse: 72,
+            morningPatientAdmissionId: admissionId,
+            eveningPatientName: 'Trần Thị B',
+            eveningPatientCode: '9999999999',
+            eveningPulse: 80,
+          }),
+        ]),
+        '2026-06-01',
+        '2026-06-01',
+        {
+          admissionId,
+          matcher: createCodeMatcher('1234567890'),
+        },
+      );
+
+      expect(dailyRows[0]?.morning?.pulse).toBe(72);
+      expect(dailyRows[0]?.evening).toBeNull();
     });
   });
 });

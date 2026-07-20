@@ -82,6 +82,11 @@ import { SnakeNamingStrategy } from './snake-naming.strategy';
             : {
                 extra: {
                   options: '-c timezone=UTC',
+                  max: configService.get<number>('DB_POOL_MAX') ?? 10,
+                  connectionTimeoutMillis:
+                    configService.get<number>(
+                      'DB_POOL_CONNECTION_TIMEOUT_MS',
+                    ) ?? 5000,
                 },
               }),
           namingStrategy: new SnakeNamingStrategy(),

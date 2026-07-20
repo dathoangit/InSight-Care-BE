@@ -9,6 +9,9 @@ import {
 } from './daily-record.service';
 import { type IBedStatusResponseDto } from './dto/bed-status-response.dto';
 import { HistoryQueryDto } from './dto/history-query.dto';
+import { type IHistoryResponseDto } from './dto/history-response.dto';
+import { PatientAdmissionsQueryDto } from './dto/patient-admissions-query.dto';
+import { type IPatientAdmissionsResponseDto } from './dto/patient-admissions-response.dto';
 import { PatientEpisodeQueryDto } from './dto/patient-episode-query.dto';
 import { type IPatientEpisodeResponseDto } from './dto/patient-episode-response.dto';
 import { StatusQueryDto } from './dto/status-query.dto';
@@ -41,7 +44,7 @@ export class DailyRecordController {
   @Get('history')
   @Auth()
   @ApiOkResponse({ description: 'Historical daily records' })
-  getHistory(@Query() query: HistoryQueryDto): Promise<ITodayRecordDto[]> {
+  getHistory(@Query() query: HistoryQueryDto): Promise<IHistoryResponseDto> {
     return this.dailyRecordService.getHistory(query);
   }
 
@@ -52,5 +55,14 @@ export class DailyRecordController {
     @Query() query: PatientEpisodeQueryDto,
   ): Promise<IPatientEpisodeResponseDto> {
     return this.dailyRecordService.getPatientEpisode(query);
+  }
+
+  @Get('patient-admissions')
+  @Auth()
+  @ApiOkResponse({ description: 'All admissions for a patient code' })
+  getPatientAdmissions(
+    @Query() query: PatientAdmissionsQueryDto,
+  ): Promise<IPatientAdmissionsResponseDto> {
+    return this.dailyRecordService.getPatientAdmissions(query);
   }
 }

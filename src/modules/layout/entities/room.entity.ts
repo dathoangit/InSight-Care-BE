@@ -7,8 +7,8 @@ import { BedEntity } from './bed.entity';
 @Index(['floor', 'name'], { unique: true })
 export class RoomEntity extends AbstractEntity {
   @Index()
-  @Column({ type: 'int' })
-  floor!: number;
+  @Column({ type: 'varchar', length: 16 })
+  floor!: string;
 
   @Column({ type: 'varchar', length: 64 })
   name!: string;

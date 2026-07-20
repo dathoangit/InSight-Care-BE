@@ -40,11 +40,12 @@ export interface IPatientEpisodeSummaryDto {
 
 export interface IPatientEpisodeResponseDto {
   patientName: string;
+  patientCode: string | null;
   bed: {
     bedId: Uuid;
     bedName: string;
     roomName: string;
-    floor: number;
+    floor: string;
   };
   startDate: string;
   endDate: string;

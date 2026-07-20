@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { generateHash } from '../../common/utils';
 import { StaffRole } from '../../constants';
+import { type HospitalFloorLabel } from '../layout/constants/floor-labels';
 import { BedEntity } from '../layout/entities/bed.entity';
 import { RoomEntity } from '../layout/entities/room.entity';
 import { UserEntity } from '../user/user.entity';
@@ -11,7 +12,7 @@ import { buildBedNames } from './bed-name.utils';
 import { HOSPITAL_LAYOUT } from './constants/hospital-layout';
 
 interface IRoomSeedSpec {
-  floor: number;
+  floor: HospitalFloorLabel;
   name: string;
   bedCount: number;
 }
@@ -102,6 +103,7 @@ export class SeedService implements OnModuleInit {
     await this.userRepository.save(
       this.userRepository.create({
         username: 'admin',
+        fullName: 'Quản trị viên',
         email: 'admin@example.com',
         passwordHash: generateHash('0123456789'),
         role: StaffRole.ADMIN,

@@ -1,4 +1,5 @@
 export * from './consciousness-level';
+export * from './default-new-user-password';
 export * from './gender';
 export * from './language-code';
 export * from './medication-action';

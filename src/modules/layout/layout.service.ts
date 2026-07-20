@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { compareFloorLabels } from './constants/floor-labels';
 import { BedEntity } from './entities/bed.entity';
 import { RoomEntity } from './entities/room.entity';
 
@@ -17,7 +18,7 @@ export interface ILayoutRoomDto {
 }
 
 export interface ILayoutFloorDto {
-  floor: number;
+  floor: string;
   rooms: ILayoutRoomDto[];
 }
 
@@ -32,7 +33,7 @@ export class LayoutService {
 
   async getLayout(): Promise<ILayoutFloorDto[]> {
     const rooms = await this.roomRepository.find({
-      order: { floor: 'ASC', name: 'ASC' },
+      order: { name: 'ASC' },
     });
     const beds = await this.bedRepository.find({
       order: { name: 'ASC' },
@@ -46,7 +47,7 @@ export class LayoutService {
       bedsByRoomId.set(bed.roomId, roomBeds);
     }
 
-    const floors = new Map<number, ILayoutFloorDto>();
+    const floors = new Map<string, ILayoutFloorDto>();
 
     for (const room of rooms) {
       const floorEntry = floors.get(room.floor) ?? {
@@ -66,6 +67,8 @@ export class LayoutService {
       floors.set(room.floor, floorEntry);
     }
 
-    return [...floors.values()].sort((left, right) => left.floor - right.floor);
+    return [...floors.values()].sort((left, right) =>
+      compareFloorLabels(left.floor, right.floor),
+    );
   }
 }

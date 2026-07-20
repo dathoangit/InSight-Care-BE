@@ -45,6 +45,22 @@ export function getNextYmdVN(dateYmd: string): string {
   return utcDate.toISOString().slice(0, 10);
 }
 
+export function offsetYmdVN(dateYmd: string, dayOffset: number): string {
+  let cursor = dateYmd;
+
+  if (dayOffset > 0) {
+    for (let index = 0; index < dayOffset; index += 1) {
+      cursor = getNextYmdVN(cursor);
+    }
+  } else if (dayOffset < 0) {
+    for (let index = 0; index < -dayOffset; index += 1) {
+      cursor = getPreviousYmdVN(cursor);
+    }
+  }
+
+  return cursor;
+}
+
 export function getYesterdayYmdVN(reference = new Date()): string {
   return getPreviousYmdVN(getTodayYmdVN(reference));
 }

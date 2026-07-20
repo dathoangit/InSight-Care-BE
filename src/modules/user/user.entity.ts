@@ -12,6 +12,9 @@ export class UserEntity extends AbstractEntity<UserDto> {
   @Column({ type: 'varchar', length: 64 })
   username!: string;
 
+  @Column({ name: 'full_name', type: 'varchar', length: 128 })
+  fullName!: string;
+
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, nullable: true })
   email!: string | null;
