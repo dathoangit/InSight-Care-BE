@@ -1,12 +1,12 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 
 import { AbstractEntity } from '../../../common/abstract.entity';
-import { BedEntity } from '../../layout/entities/bed.entity';
-import { PatientEntity } from './patient.entity';
 import {
   PatientAdmissionSource,
   PatientAdmissionStatus,
-} from './patient.enums';
+} from '../../../constants';
+import { BedEntity } from '../../layout/entities/bed.entity';
+import { PatientEntity } from './patient.entity';
 
 @Entity({ name: 'patient_admissions' })
 @Index(['patientId', 'startDate'])
@@ -18,6 +18,15 @@ export class PatientAdmissionEntity extends AbstractEntity {
 
   @Column({ name: 'bed_id', type: 'uuid' })
   bedId!: Uuid;
+
+  @Index({ unique: true, where: '"medical_record_code" IS NOT NULL' })
+  @Column({
+    name: 'medical_record_code',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  medicalRecordCode!: string | null;
 
   @Column({ name: 'start_date', type: 'date' })
   startDate!: string;

@@ -41,6 +41,7 @@ export interface IPatientEpisodeSummaryDto {
 export interface IPatientEpisodeResponseDto {
   patientName: string;
   patientCode: string | null;
+  medicalRecordCode: string | null;
   bed: {
     bedId: Uuid;
     bedName: string;

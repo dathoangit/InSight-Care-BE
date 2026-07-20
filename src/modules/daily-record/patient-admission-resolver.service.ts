@@ -1,18 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { type EntityManager, Not, Repository } from 'typeorm';
+import { type EntityManager, Not, QueryFailedError, Repository } from 'typeorm';
 
 import {
   formatBusinessDayYmd,
   getPreviousYmdVN,
 } from '../../common/vietnam-date';
-import { type DailyRecordEntity } from './entities/daily-record.entity';
-import { PatientEntity } from './entities/patient.entity';
 import {
   PatientAdmissionSource,
   PatientAdmissionStatus,
   PatientIdentityType,
-} from './entities/patient.enums';
+} from '../../constants';
+import { type DailyRecordEntity } from './entities/daily-record.entity';
+import { PatientEntity } from './entities/patient.entity';
 import { PatientAdmissionEntity } from './entities/patient-admission.entity';
 import { normalizePatientCodeField } from './patient-episode.utils';
 
@@ -24,6 +24,7 @@ export interface IResolveAdmissionInput {
   shift: ResolveAdmissionShift;
   patientName: string | null;
   patientCode: string | null;
+  medicalRecordCode: string | null;
   existingRecord: DailyRecordEntity | null;
   previousDayRecord: DailyRecordEntity | null;
   manager?: EntityManager;
@@ -35,6 +36,8 @@ export interface IAdmissionResolutionMetrics {
   reusedAdmissions: number;
   dischargedAdmissions: number;
 }
+
+const PG_UNIQUE_VIOLATION = '23505';
 
 @Injectable()
 export class PatientAdmissionResolverService {
@@ -95,6 +98,9 @@ export class PatientAdmissionResolverService {
   ): Promise<PatientAdmissionEntity | null> {
     const patientName = input.patientName?.trim() || null;
     const patientCode = normalizePatientCodeField(input.patientCode);
+    const medicalRecordCode = normalizePatientCodeField(
+      input.medicalRecordCode,
+    );
 
     if (!patientName && !patientCode) {
       return null;
@@ -106,6 +112,7 @@ export class PatientAdmissionResolverService {
       return this.resolveCodedAdmission(
         patientCode,
         patientName,
+        medicalRecordCode,
         input.bedId,
         businessDayYmd,
         input.manager,
@@ -115,6 +122,7 @@ export class PatientAdmissionResolverService {
     return this.resolveNoCodeAdmission(
       input,
       patientName,
+      medicalRecordCode,
       businessDayYmd,
       input.manager,
     );
@@ -135,6 +143,7 @@ export class PatientAdmissionResolverService {
   private async resolveCodedAdmission(
     patientCode: string,
     patientName: string | null,
+    medicalRecordCode: string | null,
     bedId: Uuid,
     businessDayYmd: string,
     manager?: EntityManager,
@@ -164,9 +173,10 @@ export class PatientAdmissionResolverService {
 
     if (activeOnBed && this.isContinuousStay(activeOnBed, businessDayYmd)) {
       activeOnBed.endDate = businessDayYmd;
+      this.applyMedicalRecordCodeOnReuse(activeOnBed, medicalRecordCode);
       this.metrics.reusedAdmissions += 1;
 
-      return admissionRepository.save(activeOnBed);
+      return this.saveAdmission(activeOnBed, manager);
     }
 
     if (activeOnBed) {
@@ -178,6 +188,7 @@ export class PatientAdmissionResolverService {
       bedId,
       businessDayYmd,
       PatientAdmissionSource.WITH_CODE,
+      medicalRecordCode,
       manager,
     );
   }
@@ -185,6 +196,7 @@ export class PatientAdmissionResolverService {
   private async resolveNoCodeAdmission(
     input: IResolveAdmissionInput,
     patientName: string | null,
+    medicalRecordCode: string | null,
     businessDayYmd: string,
     manager?: EntityManager,
   ): Promise<PatientAdmissionEntity> {
@@ -206,9 +218,10 @@ export class PatientAdmissionResolverService {
         this.isContinuousStay(admission, businessDayYmd)
       ) {
         admission.endDate = businessDayYmd;
+        this.applyMedicalRecordCodeOnReuse(admission, medicalRecordCode);
         this.metrics.reusedAdmissions += 1;
 
-        return admissionRepository.save(admission);
+        return this.saveAdmission(admission, manager);
       }
     }
 
@@ -219,6 +232,7 @@ export class PatientAdmissionResolverService {
       input.bedId,
       businessDayYmd,
       PatientAdmissionSource.NO_CODE,
+      medicalRecordCode,
       manager,
     );
   }
@@ -281,6 +295,15 @@ export class PatientAdmissionResolverService {
     );
   }
 
+  private applyMedicalRecordCodeOnReuse(
+    admission: PatientAdmissionEntity,
+    medicalRecordCode: string | null,
+  ): void {
+    if (medicalRecordCode) {
+      admission.medicalRecordCode = medicalRecordCode;
+    }
+  }
+
   private async findOrCreateCodedPatient(
     patientCode: string,
     patientName: string | null,
@@ -330,6 +353,7 @@ export class PatientAdmissionResolverService {
     bedId: Uuid,
     businessDayYmd: string,
     source: PatientAdmissionSource,
+    medicalRecordCode: string | null,
     manager?: EntityManager,
   ): Promise<PatientAdmissionEntity> {
     const admissionRepository = this.admissionRepo(manager);
@@ -340,10 +364,30 @@ export class PatientAdmissionResolverService {
       endDate: businessDayYmd,
       status: PatientAdmissionStatus.ACTIVE,
       source,
+      medicalRecordCode,
     });
     this.metrics.createdAdmissions += 1;
 
-    return admissionRepository.save(created);
+    return this.saveAdmission(created, manager);
+  }
+
+  private async saveAdmission(
+    admission: PatientAdmissionEntity,
+    manager?: EntityManager,
+  ): Promise<PatientAdmissionEntity> {
+    try {
+      return await this.admissionRepo(manager).save(admission);
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        (error as QueryFailedError & { driverError?: { code?: string } })
+          .driverError.code === PG_UNIQUE_VIOLATION
+      ) {
+        throw new ConflictException('Medical record code already exists');
+      }
+
+      throw error;
+    }
   }
 
   private async dischargeActiveAdmissionsOnOtherBeds(

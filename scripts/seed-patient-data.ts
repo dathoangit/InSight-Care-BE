@@ -23,13 +23,13 @@ import {
   getPreviousYmdVN,
   getTodayYmdVN,
 } from '../src/common/vietnam-date';
-import { DailyRecordEntity } from '../src/modules/daily-record/entities/daily-record.entity';
-import { PatientEntity } from '../src/modules/daily-record/entities/patient.entity';
 import {
   PatientAdmissionSource,
   PatientAdmissionStatus,
   PatientIdentityType,
-} from '../src/modules/daily-record/entities/patient.enums';
+} from '../src/constants';
+import { DailyRecordEntity } from '../src/modules/daily-record/entities/daily-record.entity';
+import { PatientEntity } from '../src/modules/daily-record/entities/patient.entity';
 import { PatientAdmissionEntity } from '../src/modules/daily-record/entities/patient-admission.entity';
 import { BedEntity } from '../src/modules/layout/entities/bed.entity';
 import { sortBedsByLayout } from '../src/modules/layout/utils/sort-beds-by-layout';
@@ -588,6 +588,7 @@ async function assignNewStaysForDay(
         endDate: ymd,
         status: PatientAdmissionStatus.ACTIVE,
         source: PatientAdmissionSource.WITH_CODE,
+        medicalRecordCode: String(2_000_000 + dayIndex * 200 + bedIndex),
       }),
     );
 
@@ -643,6 +644,7 @@ function writeDailyRecordsForDay(
         businessDayAt: businessDayStartUtc(ymd),
         morningPatientName: stay.patient.displayName,
         morningPatientCode: stay.patient.patientCode,
+        morningMedicalRecordCode: stay.admission.medicalRecordCode,
         morningPatientAdmissionId: stay.admission.id,
         morningPulse: morningVitals.pulse,
         morningTemp: morningVitals.temp,
@@ -650,6 +652,7 @@ function writeDailyRecordsForDay(
         morningNote: morningVitals.note,
         eveningPatientName: stay.patient.displayName,
         eveningPatientCode: stay.patient.patientCode,
+        eveningMedicalRecordCode: stay.admission.medicalRecordCode,
         eveningPatientAdmissionId: stay.admission.id,
         eveningPulse: eveningVitals.pulse,
         eveningTemp: eveningVitals.temp,

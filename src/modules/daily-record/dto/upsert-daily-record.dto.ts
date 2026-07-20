@@ -26,6 +26,12 @@ export class UpsertDailyRecordDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{1,10}$/)
+  @MaxLength(10)
+  morningMedicalRecordCode?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(255)
   eveningPatientName?: string | null;
 
@@ -34,6 +40,12 @@ export class UpsertDailyRecordDto {
   @Matches(/^\d{1,10}$/)
   @MaxLength(10)
   eveningPatientCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,10}$/)
+  @MaxLength(10)
+  eveningMedicalRecordCode?: string | null;
 
   @IsOptional()
   @IsInt()

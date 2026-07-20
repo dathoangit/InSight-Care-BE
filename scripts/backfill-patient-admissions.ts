@@ -12,13 +12,13 @@ import { type Repository } from 'typeorm';
 
 import dataSource from '../ormconfig';
 import { formatBusinessDayYmd, getNextYmdVN } from '../src/common/vietnam-date';
-import { DailyRecordEntity } from '../src/modules/daily-record/entities/daily-record.entity';
-import { PatientEntity } from '../src/modules/daily-record/entities/patient.entity';
 import {
   PatientAdmissionSource,
   PatientAdmissionStatus,
   PatientIdentityType,
-} from '../src/modules/daily-record/entities/patient.enums';
+} from '../src/constants';
+import { DailyRecordEntity } from '../src/modules/daily-record/entities/daily-record.entity';
+import { PatientEntity } from '../src/modules/daily-record/entities/patient.entity';
 import { PatientAdmissionEntity } from '../src/modules/daily-record/entities/patient-admission.entity';
 import {
   buildRecordsByDate,
@@ -186,6 +186,7 @@ async function resolveCodeShiftAdmission(
     endDate: dateYmd,
     status: PatientAdmissionStatus.ACTIVE,
     source: PatientAdmissionSource.WITH_CODE,
+    medicalRecordCode: null,
   });
 
   if (!isDryRun) {

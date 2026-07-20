@@ -23,6 +23,12 @@ export class PatientEpisodeQueryDto {
   @MaxLength(10)
   patientCode?: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,10}$/)
+  @MaxLength(10)
+  medicalRecordCode?: string;
+
   @IsDateString()
   anchorDate!: string;
 }

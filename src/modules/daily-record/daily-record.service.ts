@@ -69,6 +69,7 @@ import {
 const MORNING_UPSERT_KEYS = [
   'morningPatientName',
   'morningPatientCode',
+  'morningMedicalRecordCode',
   'morningPulse',
   'morningTemp',
   'morningBp',
@@ -78,11 +79,19 @@ const MORNING_UPSERT_KEYS = [
 const EVENING_UPSERT_KEYS = [
   'eveningPatientName',
   'eveningPatientCode',
+  'eveningMedicalRecordCode',
   'eveningPulse',
   'eveningTemp',
   'eveningBp',
   'eveningNote',
 ] as const satisfies ReadonlyArray<keyof UpsertDailyRecordDto>;
+
+const MEDICAL_RECORD_CODE_UPSERT_KEYS = new Set<keyof UpsertDailyRecordDto>([
+  'morningMedicalRecordCode',
+  'eveningMedicalRecordCode',
+  'morningPatientCode',
+  'eveningPatientCode',
+]);
 
 const RECORD_USER_RELATIONS = {
   morningEnteredByUser: true,
@@ -155,6 +164,7 @@ interface IIndexedBedStatusRecords {
   recordByBedId: Map<Uuid, DailyRecordEntity>;
   previousDayPatientByBedId: Map<Uuid, string>;
   previousDayPatientCodeByBedId: Map<Uuid, string>;
+  previousDayMedicalRecordCodeByBedId: Map<Uuid, string>;
 }
 
 export interface ITodayRecordDto {
@@ -163,9 +173,11 @@ export interface ITodayRecordDto {
   bedId: Uuid;
   morningPatientName: string | null;
   morningPatientCode: string | null;
+  morningMedicalRecordCode: string | null;
   morningPatientAdmissionId: Uuid | null;
   eveningPatientName: string | null;
   eveningPatientCode: string | null;
+  eveningMedicalRecordCode: string | null;
   eveningPatientAdmissionId: Uuid | null;
   morningPulse: number | null;
   morningTemp: number | null;
@@ -189,6 +201,7 @@ export interface IBedTodayStatusDto {
   todayRecord: ITodayRecordDto | null;
   yesterdayPatientName: string | null;
   yesterdayPatientCode: string | null;
+  yesterdayMedicalRecordCode: string | null;
 }
 
 @Injectable()
@@ -323,6 +336,9 @@ export class DailyRecordService {
           indexedRecords.previousDayPatientByBedId.get(bed.id) ?? null,
         yesterdayPatientCode:
           indexedRecords.previousDayPatientCodeByBedId.get(bed.id) ?? null,
+        yesterdayMedicalRecordCode:
+          indexedRecords.previousDayMedicalRecordCodeByBedId.get(bed.id) ??
+          null,
       };
     });
   }
@@ -335,6 +351,7 @@ export class DailyRecordService {
     const recordByBedId = new Map<Uuid, DailyRecordEntity>();
     const previousDayPatientByBedId = new Map<Uuid, string>();
     const previousDayPatientCodeByBedId = new Map<Uuid, string>();
+    const previousDayMedicalRecordCodeByBedId = new Map<Uuid, string>();
 
     for (const record of records) {
       const recordDayYmd = formatBusinessDayYmd(record.businessDayAt);
@@ -344,18 +361,12 @@ export class DailyRecordService {
       }
 
       if (recordDayYmd === previousDay) {
-        const previousDayName =
-          record.eveningPatientName ?? record.morningPatientName;
-        const previousDayCode =
-          record.eveningPatientCode ?? record.morningPatientCode;
-
-        if (previousDayName) {
-          previousDayPatientByBedId.set(record.bedId, previousDayName);
-        }
-
-        if (previousDayCode) {
-          previousDayPatientCodeByBedId.set(record.bedId, previousDayCode);
-        }
+        this.indexPreviousDayPatientFields(
+          record,
+          previousDayPatientByBedId,
+          previousDayPatientCodeByBedId,
+          previousDayMedicalRecordCodeByBedId,
+        );
       }
     }
 
@@ -363,7 +374,37 @@ export class DailyRecordService {
       recordByBedId,
       previousDayPatientByBedId,
       previousDayPatientCodeByBedId,
+      previousDayMedicalRecordCodeByBedId,
     };
+  }
+
+  private indexPreviousDayPatientFields(
+    record: DailyRecordEntity,
+    previousDayPatientByBedId: Map<Uuid, string>,
+    previousDayPatientCodeByBedId: Map<Uuid, string>,
+    previousDayMedicalRecordCodeByBedId: Map<Uuid, string>,
+  ): void {
+    const previousDayName =
+      record.eveningPatientName ?? record.morningPatientName;
+    const previousDayCode =
+      record.eveningPatientCode ?? record.morningPatientCode;
+    const previousDayMedicalRecordCode =
+      record.eveningMedicalRecordCode ?? record.morningMedicalRecordCode;
+
+    if (previousDayName) {
+      previousDayPatientByBedId.set(record.bedId, previousDayName);
+    }
+
+    if (previousDayCode) {
+      previousDayPatientCodeByBedId.set(record.bedId, previousDayCode);
+    }
+
+    if (previousDayMedicalRecordCode) {
+      previousDayMedicalRecordCodeByBedId.set(
+        record.bedId,
+        previousDayMedicalRecordCode,
+      );
+    }
   }
 
   async upsert(
@@ -450,8 +491,14 @@ export class DailyRecordService {
       bedId,
       morningPatientName: dto.morningPatientName ?? null,
       morningPatientCode: normalizePatientCodeField(dto.morningPatientCode),
+      morningMedicalRecordCode: normalizePatientCodeField(
+        dto.morningMedicalRecordCode,
+      ),
       eveningPatientName: dto.eveningPatientName ?? null,
       eveningPatientCode: normalizePatientCodeField(dto.eveningPatientCode),
+      eveningMedicalRecordCode: normalizePatientCodeField(
+        dto.eveningMedicalRecordCode,
+      ),
       morningPulse: dto.morningPulse ?? null,
       morningTemp: dto.morningTemp ?? null,
       morningBp: dto.morningBp ?? null,
@@ -474,8 +521,10 @@ export class DailyRecordService {
     > = [
       ['morningPatientName', 'morningPatientName'],
       ['morningPatientCode', 'morningPatientCode'],
+      ['morningMedicalRecordCode', 'morningMedicalRecordCode'],
       ['eveningPatientName', 'eveningPatientName'],
       ['eveningPatientCode', 'eveningPatientCode'],
+      ['eveningMedicalRecordCode', 'eveningMedicalRecordCode'],
       ['morningPulse', 'morningPulse'],
       ['morningTemp', 'morningTemp'],
       ['morningBp', 'morningBp'],
@@ -490,12 +539,11 @@ export class DailyRecordService {
       if (dto[dtoKey] !== undefined) {
         const value = dto[dtoKey];
 
-        record[entityKey] =
-          dtoKey === 'morningPatientCode' || dtoKey === 'eveningPatientCode'
-            ? (normalizePatientCodeField(
-                value as string | null | undefined,
-              ) as never)
-            : (value as never);
+        record[entityKey] = MEDICAL_RECORD_CODE_UPSERT_KEYS.has(dtoKey)
+          ? (normalizePatientCodeField(
+              value as string | null | undefined,
+            ) as never)
+          : (value as never);
       }
     }
 
@@ -516,32 +564,12 @@ export class DailyRecordService {
     previousDayRecord: DailyRecordEntity | null,
     manager?: EntityManager,
   ): Promise<void> {
-    const shifts: ResolveAdmissionShift[] = [];
-
-    if (
-      dto.morningPatientName !== undefined ||
-      dto.morningPatientCode !== undefined
-    ) {
-      shifts.push('morning');
-    }
-
-    if (
-      dto.eveningPatientName !== undefined ||
-      dto.eveningPatientCode !== undefined
-    ) {
-      shifts.push('evening');
-    }
+    const shifts = this.collectShiftsNeedingAdmissionSync(dto);
 
     await Promise.all(
       shifts.map(async (shift) => {
-        const patientName =
-          shift === 'morning'
-            ? record.morningPatientName
-            : record.eveningPatientName;
-        const patientCode =
-          shift === 'morning'
-            ? record.morningPatientCode
-            : record.eveningPatientCode;
+        const { patientName, patientCode, medicalRecordCode } =
+          this.getShiftPatientIdentity(record, shift);
 
         const admission = await this.patientAdmissionResolver.resolveAdmission({
           bedId: record.bedId,
@@ -549,18 +577,76 @@ export class DailyRecordService {
           shift,
           patientName,
           patientCode,
+          medicalRecordCode,
           existingRecord: existing ?? record,
           previousDayRecord,
           manager,
         });
 
-        if (shift === 'morning') {
-          record.morningPatientAdmissionId = admission?.id ?? null;
-        } else {
-          record.eveningPatientAdmissionId = admission?.id ?? null;
-        }
+        this.applyAdmissionIdToRecord(record, shift, admission?.id ?? null);
       }),
     );
+  }
+
+  private collectShiftsNeedingAdmissionSync(
+    dto: UpsertDailyRecordDto,
+  ): ResolveAdmissionShift[] {
+    const shifts: ResolveAdmissionShift[] = [];
+
+    if (
+      dto.morningPatientName !== undefined ||
+      dto.morningPatientCode !== undefined ||
+      dto.morningMedicalRecordCode !== undefined
+    ) {
+      shifts.push('morning');
+    }
+
+    if (
+      dto.eveningPatientName !== undefined ||
+      dto.eveningPatientCode !== undefined ||
+      dto.eveningMedicalRecordCode !== undefined
+    ) {
+      shifts.push('evening');
+    }
+
+    return shifts;
+  }
+
+  private getShiftPatientIdentity(
+    record: DailyRecordEntity,
+    shift: ResolveAdmissionShift,
+  ): {
+    patientName: string | null;
+    patientCode: string | null;
+    medicalRecordCode: string | null;
+  } {
+    if (shift === 'morning') {
+      return {
+        patientName: record.morningPatientName,
+        patientCode: record.morningPatientCode,
+        medicalRecordCode: record.morningMedicalRecordCode,
+      };
+    }
+
+    return {
+      patientName: record.eveningPatientName,
+      patientCode: record.eveningPatientCode,
+      medicalRecordCode: record.eveningMedicalRecordCode,
+    };
+  }
+
+  private applyAdmissionIdToRecord(
+    record: DailyRecordEntity,
+    shift: ResolveAdmissionShift,
+    admissionId: Uuid | null,
+  ): void {
+    if (shift === 'morning') {
+      record.morningPatientAdmissionId = admissionId;
+
+      return;
+    }
+
+    record.eveningPatientAdmissionId = admissionId;
   }
 
   private async fetchDailyRecordsInRange(
@@ -654,6 +740,7 @@ export class DailyRecordService {
     anchorDate: string,
     patientCode?: string,
     patientName?: string,
+    medicalRecordCode?: string,
   ): Promise<{
     admission: PatientAdmissionEntity;
     patient: PatientEntity;
@@ -661,8 +748,11 @@ export class DailyRecordService {
     endDate: string;
     displayName: string;
     patientCode: string | null;
+    medicalRecordCode: string | null;
   } | null> {
     const normalizedCode = normalizePatientCodeField(patientCode);
+    const normalizedMedicalRecordCode =
+      normalizePatientCodeField(medicalRecordCode);
     const anchorRecord = await this.dailyRecordRepository.findOne({
       where: {
         bedId,
@@ -680,6 +770,20 @@ export class DailyRecordService {
 
       if (fromAnchor) {
         return fromAnchor;
+      }
+    }
+
+    if (normalizedMedicalRecordCode) {
+      const fromMedicalRecordCode =
+        await this.resolveContextByMedicalRecordCode(
+          bedId,
+          anchorDate,
+          normalizedMedicalRecordCode,
+          patientName,
+        );
+
+      if (fromMedicalRecordCode) {
+        return fromMedicalRecordCode;
       }
     }
 
@@ -716,6 +820,7 @@ export class DailyRecordService {
     endDate: string;
     displayName: string;
     patientCode: string | null;
+    medicalRecordCode: string | null;
   } | null> {
     const admissionId = this.pickAdmissionIdFromAnchorRecord(
       anchorRecord,
@@ -739,6 +844,39 @@ export class DailyRecordService {
     return this.formatAdmissionContext(admission, patientName, normalizedCode);
   }
 
+  private async resolveContextByMedicalRecordCode(
+    bedId: Uuid,
+    anchorDate: string,
+    medicalRecordCode: string,
+    patientName?: string,
+  ): Promise<{
+    admission: PatientAdmissionEntity;
+    patient: PatientEntity;
+    startDate: string;
+    endDate: string;
+    displayName: string;
+    patientCode: string | null;
+    medicalRecordCode: string | null;
+  } | null> {
+    const admission = await this.admissionRepository.findOne({
+      where: { medicalRecordCode, bedId },
+      relations: { patient: true },
+    });
+
+    if (!admission) {
+      return null;
+    }
+
+    if (
+      admission.startDate > anchorDate ||
+      (admission.endDate !== null && admission.endDate < anchorDate)
+    ) {
+      return null;
+    }
+
+    return this.formatAdmissionContext(admission, patientName);
+  }
+
   private async resolveContextByPatientCode(
     bedId: Uuid,
     anchorDate: string,
@@ -751,6 +889,7 @@ export class DailyRecordService {
     endDate: string;
     displayName: string;
     patientCode: string | null;
+    medicalRecordCode: string | null;
   } | null> {
     const patient = await this.patientRepository.findOne({
       where: { patientCode: normalizedCode },
@@ -791,6 +930,7 @@ export class DailyRecordService {
     endDate: string;
     displayName: string;
     patientCode: string | null;
+    medicalRecordCode: string | null;
   } {
     return {
       admission,
@@ -799,6 +939,7 @@ export class DailyRecordService {
       endDate: admission.endDate ?? admission.startDate,
       displayName: admission.patient.displayName ?? patientName?.trim() ?? '',
       patientCode: admission.patient.patientCode ?? fallbackCode ?? null,
+      medicalRecordCode: admission.medicalRecordCode,
     };
   }
 
@@ -822,6 +963,7 @@ export class DailyRecordService {
       endDate: string;
       displayName: string;
       patientCode: string | null;
+      medicalRecordCode: string | null;
     },
     patientName: string | null,
   ): Promise<IPatientEpisodeResponseDto> {
@@ -845,6 +987,7 @@ export class DailyRecordService {
     return {
       patientName: context.displayName,
       patientCode: context.patientCode,
+      medicalRecordCode: context.medicalRecordCode,
       bed: {
         bedId: bed.id,
         bedName: bed.name,
@@ -884,6 +1027,7 @@ export class DailyRecordService {
         roomName: admission.bed.room.name,
         floor: admission.bed.room.floor,
       },
+      medicalRecordCode: admission.medicalRecordCode,
       startDate: admission.startDate,
       endDate,
       totalDays: countInclusiveDays(admission.startDate, endDate),
@@ -944,6 +1088,7 @@ export class DailyRecordService {
       query.anchorDate,
       query.patientCode,
       query.patientName,
+      query.medicalRecordCode,
     );
 
     if (admissionContext) {
@@ -1010,6 +1155,7 @@ export class DailyRecordService {
           boundaries.startDate,
           boundaries.endDate,
         ),
+      medicalRecordCode: query.medicalRecordCode ?? null,
       bed: {
         bedId: bed.id,
         bedName: bed.name,
@@ -1028,7 +1174,11 @@ export class DailyRecordService {
   }
 
   async getHistory(query: HistoryQueryDto): Promise<IHistoryResponseDto> {
-    if (query.patientName?.trim() || query.patientCode?.trim()) {
+    if (
+      query.patientName?.trim() ||
+      query.patientCode?.trim() ||
+      query.medicalRecordCode?.trim()
+    ) {
       return this.getHistoryByAdmissions(query);
     }
 
@@ -1121,6 +1271,7 @@ export class DailyRecordService {
     query: HistoryQueryDto,
     serverToday: string,
     normalizedCode: string | null,
+    normalizedMedicalRecordCode: string | null,
     patientNameFilter: string | null,
   ): Promise<IHistoryAdmissionItemDto[]> {
     const builder = this.admissionRepository
@@ -1132,6 +1283,12 @@ export class DailyRecordService {
     if (normalizedCode) {
       builder.andWhere('patient.patient_code = :patientCode', {
         patientCode: normalizedCode,
+      });
+    }
+
+    if (normalizedMedicalRecordCode) {
+      builder.andWhere('admission.medical_record_code = :medicalRecordCode', {
+        medicalRecordCode: normalizedMedicalRecordCode,
       });
     }
 
@@ -1197,6 +1354,7 @@ export class DailyRecordService {
     builder: ReturnType<typeof this.dailyRecordRepository.createQueryBuilder>,
     query: HistoryQueryDto,
     normalizedCode: string | null,
+    normalizedMedicalRecordCode: string | null,
     patientNameFilter: string | null,
     rangeStart: Date,
     rangeEnd: Date,
@@ -1216,6 +1374,13 @@ export class DailyRecordService {
       );
     }
 
+    if (normalizedMedicalRecordCode) {
+      builder.andWhere(
+        '(record.morning_medical_record_code = :medicalRecordCode OR record.evening_medical_record_code = :medicalRecordCode)',
+        { medicalRecordCode: normalizedMedicalRecordCode },
+      );
+    }
+
     if (patientNameFilter) {
       builder.andWhere(
         '(record.morning_patient_name ILIKE :patientName OR record.evening_patient_name ILIKE :patientName)',
@@ -1230,13 +1395,14 @@ export class DailyRecordService {
     query: HistoryQueryDto,
     serverToday: string,
     normalizedCode: string | null,
+    normalizedMedicalRecordCode: string | null,
     patientNameFilter: string | null,
   ): Promise<IHistoryAdmissionItemDto[]> {
     const rangeStart = businessDayStartUtc(query.startDate);
     const rangeEnd = businessDayEndUtc(query.endDate);
     const matcher = createPatientMatcher(normalizedCode, patientNameFilter);
 
-    if (!matcher) {
+    if (!matcher && !normalizedMedicalRecordCode) {
       return [];
     }
 
@@ -1244,6 +1410,7 @@ export class DailyRecordService {
       this.dailyRecordRepository.createQueryBuilder('record'),
       query,
       normalizedCode,
+      normalizedMedicalRecordCode,
       patientNameFilter,
       rangeStart,
       rangeEnd,
@@ -1276,7 +1443,7 @@ export class DailyRecordService {
           query.endDate,
         );
         const recordsByDate = buildRecordsByDate(records);
-        const episodes = findAllEpisodes(recordsByDate, matcher);
+        const episodes = matcher ? findAllEpisodes(recordsByDate, matcher) : [];
         const bedAdmissions: IHistoryAdmissionItemDto[] = [];
 
         for (const episode of episodes) {
@@ -1296,7 +1463,7 @@ export class DailyRecordService {
             recordsByDate,
             episode.startDate,
             episode.endDate,
-            { matcher },
+            { matcher: matcher! },
           );
           const patientCode =
             normalizedCode ??
@@ -1310,6 +1477,7 @@ export class DailyRecordService {
           bedAdmissions.push({
             patientName: episode.displayName,
             patientCode,
+            medicalRecordCode: normalizedMedicalRecordCode,
             bed: {
               bedId: bed.id,
               bedName: bed.name,
@@ -1348,12 +1516,16 @@ export class DailyRecordService {
     const normalizedCode = query.patientCode
       ? normalizePatientCodeField(query.patientCode)
       : null;
+    const normalizedMedicalRecordCode = query.medicalRecordCode
+      ? normalizePatientCodeField(query.medicalRecordCode)
+      : null;
     const patientNameFilter = query.patientName?.trim() || null;
 
     const dbAdmissions = await this.findHistoryAdmissionsFromDb(
       query,
       serverToday,
       normalizedCode,
+      normalizedMedicalRecordCode,
       patientNameFilter,
     );
     const admissions =
@@ -1363,6 +1535,7 @@ export class DailyRecordService {
             query,
             serverToday,
             normalizedCode,
+            normalizedMedicalRecordCode,
             patientNameFilter,
           );
 
@@ -1382,36 +1555,74 @@ export class DailyRecordService {
     query: PatientAdmissionsQueryDto,
   ): Promise<IPatientAdmissionsResponseDto> {
     const patientCode = normalizePatientCodeField(query.patientCode);
-
-    if (!patientCode) {
-      throw new BadRequestException('Invalid patient code');
-    }
-
-    const patient = await this.patientRepository.findOne({
-      where: { patientCode },
-    });
-
-    if (patient) {
-      const storedResponse = await this.buildStoredPatientAdmissionsResponse(
-        patient,
-        patientCode,
-      );
-
-      if (storedResponse) {
-        return storedResponse;
-      }
-    }
-
-    this.logger.warn(
-      `getPatientAdmissions fallback for patientCode=${patientCode}`,
+    const medicalRecordCode = normalizePatientCodeField(
+      query.medicalRecordCode,
     );
 
-    return this.buildFallbackPatientAdmissionsResponse(patientCode);
+    if (!patientCode && !medicalRecordCode) {
+      throw new BadRequestException(
+        'patientCode or medicalRecordCode is required',
+      );
+    }
+
+    if (patientCode) {
+      const patient = await this.patientRepository.findOne({
+        where: { patientCode },
+      });
+
+      if (patient) {
+        const storedResponse = await this.buildStoredPatientAdmissionsResponse(
+          patient,
+          patientCode,
+        );
+
+        if (storedResponse) {
+          return storedResponse;
+        }
+      }
+
+      this.logger.warn(
+        `getPatientAdmissions fallback for patientCode=${patientCode}`,
+      );
+
+      return this.buildFallbackPatientAdmissionsResponse(patientCode);
+    }
+
+    const admission = await this.admissionRepository.findOne({
+      where: { medicalRecordCode: medicalRecordCode! },
+      relations: { patient: true },
+    });
+
+    if (!admission) {
+      throw new NotFoundException('Medical record code not found');
+    }
+
+    const storedResponse = await this.buildStoredPatientAdmissionsResponse(
+      admission.patient,
+      admission.patient.patientCode,
+    );
+
+    if (storedResponse) {
+      return storedResponse;
+    }
+
+    if (admission.patient.patientCode) {
+      return this.buildFallbackPatientAdmissionsResponse(
+        admission.patient.patientCode,
+      );
+    }
+
+    return {
+      patientCode: admission.patient.patientCode,
+      patientName: admission.patient.displayName,
+      totalAdmissions: 0,
+      admissions: [],
+    };
   }
 
   private async buildStoredPatientAdmissionsResponse(
     patient: PatientEntity,
-    patientCode: string,
+    patientCode: string | null,
   ): Promise<IPatientAdmissionsResponseDto | null> {
     const admissions = await this.admissionRepository.find({
       where: { patientId: patient.id },
@@ -1436,7 +1647,7 @@ export class DailyRecordService {
     const recordsByBedId = this.groupRecordsByBedId(allRecords);
     const admissionItems = this.buildAdmissionSummariesBatch(
       admissions,
-      patientCode,
+      patientCode ?? '',
       patient.displayName,
       recordsByBedId,
     );
@@ -1507,6 +1718,7 @@ export class DailyRecordService {
           roomName: bed.room.name,
           floor: bed.room.floor,
         },
+        medicalRecordCode: null,
         startDate: episode.startDate,
         endDate: episode.endDate,
         totalDays: countInclusiveDays(episode.startDate, episode.endDate),
@@ -1625,9 +1837,11 @@ export class DailyRecordService {
       bedId: record.bedId,
       morningPatientName: record.morningPatientName,
       morningPatientCode: record.morningPatientCode,
+      morningMedicalRecordCode: record.morningMedicalRecordCode,
       morningPatientAdmissionId: record.morningPatientAdmissionId,
       eveningPatientName: record.eveningPatientName,
       eveningPatientCode: record.eveningPatientCode,
+      eveningMedicalRecordCode: record.eveningMedicalRecordCode,
       eveningPatientAdmissionId: record.eveningPatientAdmissionId,
       morningPulse: record.morningPulse,
       morningTemp: record.morningTemp,

@@ -1,7 +1,7 @@
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 
 import { AbstractEntity } from '../../../common/abstract.entity';
-import { PatientIdentityType } from './patient.enums';
+import { PatientIdentityType } from '../../../constants';
 import { PatientAdmissionEntity } from './patient-admission.entity';
 
 @Entity({ name: 'patients' })

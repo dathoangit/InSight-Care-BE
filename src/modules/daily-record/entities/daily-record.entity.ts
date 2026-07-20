@@ -33,6 +33,15 @@ export class DailyRecordEntity extends AbstractEntity {
   })
   morningPatientCode!: string | null;
 
+  @Index()
+  @Column({
+    name: 'morning_medical_record_code',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  morningMedicalRecordCode!: string | null;
+
   @Column({
     name: 'evening_patient_name',
     type: 'varchar',
@@ -49,6 +58,15 @@ export class DailyRecordEntity extends AbstractEntity {
     nullable: true,
   })
   eveningPatientCode!: string | null;
+
+  @Index()
+  @Column({
+    name: 'evening_medical_record_code',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+  })
+  eveningMedicalRecordCode!: string | null;
 
   @Index()
   @Column({

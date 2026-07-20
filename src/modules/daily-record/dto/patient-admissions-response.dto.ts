@@ -7,6 +7,7 @@ export interface IPatientAdmissionItemDto {
     roomName: string;
     floor: string;
   };
+  medicalRecordCode: string | null;
   startDate: string;
   endDate: string;
   totalDays: number;
@@ -15,7 +16,7 @@ export interface IPatientAdmissionItemDto {
 }
 
 export interface IPatientAdmissionsResponseDto {
-  patientCode: string;
+  patientCode: string | null;
   patientName: string | null;
   totalAdmissions: number;
   admissions: IPatientAdmissionItemDto[];

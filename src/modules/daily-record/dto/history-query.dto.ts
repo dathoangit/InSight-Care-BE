@@ -30,6 +30,12 @@ export class HistoryQueryDto {
   patientCode?: string;
 
   @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,10}$/)
+  @MaxLength(10)
+  medicalRecordCode?: string;
+
+  @IsOptional()
   @IsUUID('4')
   bedId?: Uuid;
 

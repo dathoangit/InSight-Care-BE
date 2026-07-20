@@ -2,12 +2,12 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { businessDayStartUtc } from '../../common/vietnam-date';
-import { PatientEntity } from './entities/patient.entity';
 import {
   PatientAdmissionSource,
   PatientAdmissionStatus,
   PatientIdentityType,
-} from './entities/patient.enums';
+} from '../../constants';
+import { PatientEntity } from './entities/patient.entity';
 import { PatientAdmissionEntity } from './entities/patient-admission.entity';
 import { PatientAdmissionResolverService } from './patient-admission-resolver.service';
 
@@ -67,6 +67,7 @@ describe('PatientAdmissionResolverService', () => {
       shift: 'morning',
       patientName: 'Nguyễn Văn A',
       patientCode: '1234567890',
+      medicalRecordCode: '2622835',
       existingRecord: null,
       previousDayRecord: null,
     });
@@ -83,6 +84,7 @@ describe('PatientAdmissionResolverService', () => {
       endDate: '2026-07-02',
       status: PatientAdmissionStatus.ACTIVE,
       source: PatientAdmissionSource.WITH_CODE,
+      medicalRecordCode: '2622835',
     });
     expect(result?.source).toBe(PatientAdmissionSource.WITH_CODE);
     expect(service.getMetrics().createdPatients).toBe(1);
@@ -105,6 +107,7 @@ describe('PatientAdmissionResolverService', () => {
       endDate: '2026-07-01',
       status: PatientAdmissionStatus.ACTIVE,
       source: PatientAdmissionSource.WITH_CODE,
+      medicalRecordCode: '2622835',
     } as PatientAdmissionEntity);
 
     const result = await service.resolveAdmission({
@@ -113,6 +116,7 @@ describe('PatientAdmissionResolverService', () => {
       shift: 'morning',
       patientName: 'Nguyễn Văn A',
       patientCode: '1234567890',
+      medicalRecordCode: '2622835',
       existingRecord: null,
       previousDayRecord: null,
     });
@@ -121,6 +125,7 @@ describe('PatientAdmissionResolverService', () => {
       expect.objectContaining({
         id: 'admission-1',
         endDate: '2026-07-02',
+        medicalRecordCode: '2622835',
       }),
     );
     expect(result?.id).toBe('admission-1');
@@ -134,6 +139,7 @@ describe('PatientAdmissionResolverService', () => {
       shift: 'morning',
       patientName: 'Trần Thị B',
       patientCode: null,
+      medicalRecordCode: null,
       existingRecord: null,
       previousDayRecord: null,
     });
@@ -168,6 +174,7 @@ describe('PatientAdmissionResolverService', () => {
       shift: 'evening',
       patientName: 'Trần Thị B',
       patientCode: null,
+      medicalRecordCode: '2789012',
       existingRecord: {
         morningPatientName: 'Trần Thị B',
         morningPatientAdmissionId: 'admission-morning',
@@ -179,6 +186,7 @@ describe('PatientAdmissionResolverService', () => {
       expect.objectContaining({
         id: 'admission-morning',
         endDate: '2026-07-02',
+        medicalRecordCode: '2789012',
       }),
     );
     expect(result?.id).toBe('admission-morning');
@@ -212,6 +220,7 @@ describe('PatientAdmissionResolverService', () => {
       shift: 'morning',
       patientName: 'Nguyễn Văn A',
       patientCode: '1234567890',
+      medicalRecordCode: null,
       existingRecord: null,
       previousDayRecord: null,
       manager: manager as never,
@@ -221,5 +230,46 @@ describe('PatientAdmissionResolverService', () => {
     expect(manager.getRepository).toHaveBeenCalledWith(PatientAdmissionEntity);
     expect(managerPatientRepo.create).toHaveBeenCalled();
     expect(patientRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('creates new admission without inheriting medical record code after discharge gap', async () => {
+    patientRepository.findOne.mockResolvedValue({
+      id: 'patient-1',
+      patientCode: '1234567890',
+      displayName: 'Nguyễn Văn A',
+      identityType: PatientIdentityType.CODE,
+    } as PatientEntity);
+    admissionRepository.find.mockResolvedValue([]);
+    admissionRepository.findOne.mockResolvedValue({
+      id: 'admission-old',
+      patientId: 'patient-1',
+      bedId: BED_ID,
+      startDate: '2026-06-20',
+      endDate: '2026-06-25',
+      status: PatientAdmissionStatus.ACTIVE,
+      source: PatientAdmissionSource.WITH_CODE,
+      medicalRecordCode: '2622835',
+    } as PatientAdmissionEntity);
+
+    const result = await service.resolveAdmission({
+      bedId: BED_ID,
+      businessDayAt: businessDayStartUtc('2026-07-02'),
+      shift: 'morning',
+      patientName: 'Nguyễn Văn A',
+      patientCode: '1234567890',
+      medicalRecordCode: '2789012',
+      existingRecord: null,
+      previousDayRecord: null,
+    });
+
+    expect(admissionRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        medicalRecordCode: '2789012',
+        source: PatientAdmissionSource.WITH_CODE,
+      }),
+    );
+    expect(result?.medicalRecordCode).toBe('2789012');
+    expect(service.getMetrics().createdAdmissions).toBe(1);
+    expect(service.getMetrics().dischargedAdmissions).toBe(1);
   });
 });
