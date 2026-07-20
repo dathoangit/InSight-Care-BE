@@ -5,4 +5,4 @@ services:
     restart: always
     build: .
     ports:
-      - '${PORT:-8081}:8081'
+      - '${PORT:-8082}:8082'
